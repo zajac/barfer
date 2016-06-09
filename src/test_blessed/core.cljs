@@ -189,9 +189,10 @@
   (intersects? [1 5] [3 10])
   (intersects? [1 5] [5 6]))
 
-(defn find
-  ([tree from to select] (find tree [0 0] from to select))
+(defn query
+  ([tree from to select] (query tree [0 0] from to select))
   ([[children data :as tree] acc from to select]
+   (prn acc tree from to)
    (if (not (leaf? tree))
      (second
       (reduce (fn [[acc res] c]
@@ -199,7 +200,7 @@
                       acc-sel (select acc)]
                   [(sum acc (second c))
                    (if (intersects? [from to] [acc-sel (+ acc-sel sel)])
-                     (concat res (find c acc from to select))
+                     (concat res (query c acc from to select))
                      res)]))
               [acc []]
               children))
@@ -295,7 +296,7 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (find  6 700 first)
+      (query  6 700 first)
       )
 
   (-> (make-tree)
@@ -339,7 +340,7 @@
   )
 
 (defn find-one-at-idx [tree idx]
-  (first (find tree idx (inc idx) first)))
+  (first (query tree idx (inc idx) first)))
 
 (defn insert-to-str [text ins-offset arg]
   (let [low (subs text 0 ins-offset)
@@ -347,17 +348,17 @@
     (str low arg high)))
 
 (defn insert-lines [lines idx text]
-  (reduce (fn [[lines offset] line]
-            [(insert lines line offset (count line))
-             (+ offset (count line))])
-          [lines idx]
-          (split-lines text)))
+  (first (reduce (fn [[lines offset] line]
+                   [(insert lines line offset (count line))
+                    (+ offset (count line))])
+                 [lines idx]
+                 (split-lines text))))
 
 
-(defn delete-lines [lines lines-to-delete]
+(defn delete-lines [lines lines-to-delete length-fun]
   (let [[_ [start-idx _]] (first lines-to-delete)
         [last-line [last-line-idx _]] (last lines-to-delete)
-        end-idx (+ last-line-idx (count last-line))]
+        end-idx (+ last-line-idx (length-fun last-line))]
     (delete lines start-idx end-idx first)))
 
 
@@ -366,45 +367,96 @@
                  (insert-str "hello" 0)
                  (insert-str "hello2" 0)
                  (insert-str "hello34" 0))
-        lines (find tree 8 14 first)]
+        lines (query tree 8 14 first)]
     (delete-lines tree lines))
   )
 
 (defn delete-from-str [text from count]
   (str (subs text 0 from) (subs text (+ from count))))
 
+(defn delete-from-lines-tree [lines idx arg]
+  (let [intersecting-lines (query lines idx (+ idx arg) first)
+        lines (delete-lines lines intersecting-lines count)]
+    (if (= 1 (count intersecting-lines))
+      (let [[text [offset _]] (first intersecting-lines)
+            relative-offset (- idx offset)]
+        (insert-lines lines offset (delete-from-str text relative-offset arg)))
+      (let [[text-first [offset-first _]] (first intersecting-lines)
+            [text-last [offset-last _]] (last intersecting-lines)
+            first-rel-offset (- idx offset-first)
+            last-rel-offset (- (+ arg idx) offset-last)
+            first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
+            last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
+        (insert-lines lines offset-first (str first-line-trimmed
+                                              last-line-trimmed))))))
+
+(defn insert-to-lines-tree [lines idx arg]
+  (let [[text [offset num]] (or (find-one-at-idx lines (dec idx))
+                                ["" [0 0]])]
+    (-> lines
+        (delete num (inc num) second)
+        (insert-lines idx (insert-to-str text (- idx offset) arg)))))
+
+(defn insert-to-markup-tree [markup idx count]
+  (let [[marker [marker-offset marker-num]] (find-one-at-idx markup idx)]
+    (if marker
+      (let [new-marker (assoc marker :length (+ (:length marker) count))]
+        (-> markup
+            (delete marker-num (inc marker-num) second)
+            (insert new-marker marker-offset (:length new-marker))))
+      (insert markup {:length count} idx count))))
+
+(defn intersection [[start1 end1] [start2 end2]]
+  [(max start1 start2) (min end1 end2)])
+
+(defn truncate-marker [[offset len] idx count]
+  (let [marker [offset (+ offset len)]
+        deletion [idx (+ idx count)]
+        [i-start i-end] (intersection marker deletion)
+        new-len (if (intersects? marker deletion)
+                  (- len (- i-end i-start))
+                  len)]
+    (if (< offset idx)
+      [offset new-len]
+      (if (< offset (+ idx count))
+        [idx new-len]
+        [(- offset count) new-len]))))
+
+(comment
+  (truncate-marker [0 5] 0 3)
+  (truncate-marker [0 5] 2 5)
+  (truncate-marker [0 5] 2 1)
+  (truncate-marker [5 10] 3 3)
+  (truncate-marker [5 10] 0 4)
+
+  )
+
+(defn delete-from-markup-tree [markup idx cnt]
+  (let [intersecting-markups (query markup idx (+ idx cnt) first)
+        markup (delete-lines markup intersecting-markups :length)]
+    (if (= 1 (count intersecting-markups))
+      (let [[marker [offset _]] (first intersecting-markups)
+            [offset len] (truncate-marker [offset (:length marker)] idx cnt)]        
+        (insert markup (assoc marker :length len) offset len))      
+      (let [[marker-first [offset-first _]] (first intersecting-markups)
+            [marker-last [offset-last _]] (last intersecting-markups)
+            [offset-first len-first] (truncate-marker [offset-first (:length marker-first)] idx cnt)
+            [offset-last len-last] (truncate-marker [offset-last (:length marker-last)] idx cnt)]
+        (-> markup
+            (insert (assoc marker-first :length len-first) offset-first len-first)
+            (insert (assoc marker-last :length len-last) offset-last len-last))))))
+
 (defn play [[{:keys [lines markup] :as model} idx] [op arg]]
   (case op
     :retain [model (+ idx arg)]
-    :insert (let [[text [offset num]] (or (find-one-at-idx lines (dec idx))
-                                          ["" [0 0]])
-                  lines (delete lines num (inc num) second)
-                  [lines _]  (insert-lines lines idx (insert-to-str text (- idx offset) arg))
-                  [marker [marker-offset marker-num]] (find-one-at-idx markup idx)
-                  markup (if marker
-                           (let [new-marker (assoc marker :length (+ (:length marker) (count arg)))]
-                             (-> markup
-                                 (delete marker-num (inc marker-num) second)
-                                 (insert new-marker marker-offset (:length new-marker))))
-                           (insert markup {:length (count arg)} idx (count arg)))]
-              [(-> model
-                   (assoc :markup markup)
-                   (assoc :lines lines)) (+ idx (count  arg))])
-    :delete (let [intersecting-lines (find lines idx (+ idx arg) first)
-                  lines (delete-lines lines intersecting-lines)]
-              (if (= 1 (count intersecting-lines))
-                (let [[text [offset _]] (first intersecting-lines)
-                      relative-offset (- idx offset)]
-                  (insert-lines lines offset (delete-from-str text relative-offset arg)))
-                (let [[text-first [offset-first _]] (first intersecting-lines)
-                      [text-last [offset-last _]] (last intersecting-lines)
-                      first-rel-offset (- idx offset-first)
-                      last-rel-offset (- (+ arg idx) offset-last)
-                      first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
-                      last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
-                  (insert-lines lines offset-first (concat first-line-trimmed
-                                                           last-line-trimmed))))
-              )))
+    :insert [(merge model
+                    {:markup (insert-to-markup-tree markup idx (count arg))
+                     :lines (insert-to-lines-tree lines idx arg)})
+              (+ idx (count  arg))]
+    :delete  [ (merge model
+                      {:lines (delete-from-lines-tree lines idx arg)
+                       :markup (delete-from-markup-tree markup idx arg)})
+              idx]))
 
 (comment
 
@@ -426,10 +478,14 @@
                               (play [:insert "\n fuck you\n 333"])
                               (play [:insert "hello again 44444"])
                               )))
-
+  
+  
+  (delete-lines (hello-model :markup) (query (hello-model :markup) 4 (+ 4 7) first) :length)
+  
   (-> [hello-model 0]
       (play [:retain 4])
-      (play [:delete 7]))
+      (play [:delete 7])
+      (play [:delete 15]))
   )
 
 (clojure.string/split-lines "abc")
