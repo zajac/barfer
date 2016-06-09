@@ -231,6 +231,7 @@
 
 (defn insert-lines [lines idx text]
   (first (reduce (fn [[lines offset] line]
+                   #_(prn "INSERTING" "lines" lines "line" line "offset" offset)
                    [(insert lines line offset (count line))
                     (+ offset (count line))])
                  [lines idx]
@@ -257,27 +258,27 @@
   (str (subs text 0 from) (subs text (+ from count))))
 
 (defn delete-from-lines-tree [lines idx arg]
-  (let [intersecting-lines (query lines idx (+ idx arg) first)
+  (let [intersecting-lines (query lines idx (+ idx arg 1) first)        
         lines (delete-lines lines intersecting-lines count)]
-    (if (= 1 (count intersecting-lines))
-      (let [[text [offset _]] (first intersecting-lines)
-            relative-offset (- idx offset)]
-        (insert-lines lines offset (delete-from-str text relative-offset arg)))
-      (let [[text-first [offset-first _]] (first intersecting-lines)
-            [text-last [offset-last _]] (last intersecting-lines)
-            first-rel-offset (- idx offset-first)
-            last-rel-offset (- (+ arg idx) offset-last)
-            first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
-            last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
-        (insert-lines lines offset-first (str first-line-trimmed
-                                              last-line-trimmed))))))
+      (if (= 1 (count intersecting-lines))
+        (let [[text [offset _]] (first intersecting-lines)
+              relative-offset (- idx offset)]
+          (insert-lines lines offset (delete-from-str text relative-offset arg)))
+        (let [[text-first [offset-first _]] (first intersecting-lines)
+              [text-last [offset-last _]] (last intersecting-lines)
+              first-rel-offset (- idx offset-first)
+              last-rel-offset (- (+ arg idx) offset-last)
+              first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
+              last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
+          (insert-lines lines offset-first (str first-line-trimmed
+                                                last-line-trimmed))))))
 
 (defn insert-to-lines-tree [lines idx arg]
-  (let [[text [offset num]] (or (find-one-at-idx lines (dec idx))
-                                ["" [0 0]])]
+  (let [[text [offset num]] (find-one-at-idx lines idx)]
     (-> lines
-        (delete num (inc num) second)
-        (insert-lines idx (insert-to-str text (- idx offset) arg)))))
+        (cond-> num
+          (delete num (inc num) second))
+        (insert-lines (or offset idx) (insert-to-str (or text "") (- idx (or offset 0)) arg)))))
 
 (defn insert-to-markup-tree [markup idx count]
   (let [[marker [marker-offset marker-num]] (find-one-at-idx markup idx)]
@@ -355,6 +356,22 @@
                    ["Hellolo" [0 0]])
 )
 
+(defn prn-lines [model]
+  (reduce
+   (fn [s [text _]]
+     (str s text))
+   ""
+   (query (:lines model) 0 100000 first)))
+
+#_(def model {:lines (->
+                    (make-tree)
+                    (insert-str "Hello world" 0)
+                    )
+            :markup (->
+                     (make-tree)
+                     (insert {:length 11 } 0 11))
+            :caret {:line 0
+                    :col 0}})
 
 (def model (first (-> [{:lines (->
                                 (make-tree)
@@ -372,7 +389,64 @@
                       (play [:insert "Hello world 22"])
                       (play [:insert "\n fuck you\n 333"])
                       (play [:insert "hello again 44444"])
-                      )))
+                      ))
+
+  )
+
+
+(comment
+
+  (prn-lines @model-ptr)
+
+  (let [state [{:lines (make-tree)
+                :markup (make-tree)
+                :caret {:line 0 :col 0}} 0]
+        state (play state [:insert "h\n"])
+        [model _] (play state [:insert "a"])
+        state (play [model 0] [:retain 1])
+        state (play state [:delete 1])
+        ]
+    state)
+  
+  
+
+  (prn-lines (first (-> [{:lines (->
+                                  (make-tree)
+                                  (insert-str "Hello world" 0)
+                                  (insert-str "fuck you" 11))
+                          :markup (->
+                                   (make-tree)
+                                   (insert {:length 5
+                                            :attrs {:foreground "red"
+                                                    :background "black"}} 0 5)
+                                   (insert {:length 14} 6 14)
+                                   )
+                          :caret {:line 0
+                                  :col 0}} 0]
+                        (play [:insert "666"])
+                        (play [:insert "\n fuck you\n 333"])
+                        (play [:insert "hello again 44444"])
+                        )))
+
+  (prn-lines (first (-> [{:lines (->
+                                  (make-tree)
+                                  (insert-str "Hello world\n" 0)
+                                  (insert-str "fuck you" 12))
+                          :markup (->
+                                   (make-tree)
+                                   (insert {:length 5
+                                            :attrs {:foreground "red"
+                                                    :background "black"}} 0 5)
+                                   (insert {:length 14} 6 14)
+                                   )
+                          :caret {:line 0
+                                  :col 0}} 0]
+                        (play [:insert "Hello world 22"])
+                        (play [:insert "hello again 44444"])
+                        )))
+
+
+  )
 
 
 (defn line [markup l]
@@ -489,12 +563,10 @@
     {:line num
      :col (- offset line-offset)}))
 
-(defn ins-op [str {:keys [lines caret]}]
-  (let [caret-offset (pos->offset caret lines)]
-    {:ops [[:retain caret-offset]
-           [:insert str]
-           [:retain (- (doc-len lines) caret-offset)]]
-     :caret (offset->pos (+ (count str) caret-offset) lines)}))
+(defn ins-op [caret-offset str {:keys [lines caret]}]
+  [[:retain caret-offset]
+   [:insert str]
+   [:retain (- (doc-len lines) caret-offset)]])
 
 (comment
   (let [lines (:lines @model-ptr)]
@@ -507,11 +579,24 @@
 (defn play-op [model ops]
   (first (reduce play [model 0] ops)))
 
-(defn type-in [model str]
-  (let [{:keys [ops caret]} (ins-op str model)]
+(defn type-in [{:keys [lines caret] :as model} str]
+  (let [caret-offset (pos->offset caret lines)
+        ops (ins-op caret-offset str model)]
     (-> model                 
         (play-op ops)
-        (assoc :caret caret))))
+        (#(assoc % :caret (offset->pos (+ caret-offset (count str) ) (:lines %)))) )))
+
+(defn del-op [n {:keys [lines caret]}]
+  (let [caret-offset (pos->offset caret lines)]
+    {:ops [[:retain caret-offset]
+           [:delete n]
+           [:retain (- (doc-len lines) n caret-offset)]] 
+     :caret caret}))
+
+(defn delete-char [model]
+  (let [{:keys [ops]} (del-op 1 model)]
+    (-> model                 
+        (play-op ops))))
 
 (comment
 
@@ -522,11 +607,16 @@
 (defn type! [str]
   (swap! model-ptr type-in str))
 
+(defn delete! []
+  (swap! model-ptr delete-char))
+
 (defn keys-handler [_ jskey]
   (let [k (js->clj jskey)
         n (k "name")]
+    
     (when (#{"down" "up" "left" "right"} n) (move-cursor! (keyword n)))
-    (when (#{"a"} n) (type! n))))
+    (when (#{"a"} n) (type! n))
+    (when (#{"delete"} n) (delete!))))
 
 
 
