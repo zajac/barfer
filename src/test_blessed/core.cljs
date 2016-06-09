@@ -315,7 +315,7 @@
                         (insert {:attrs {:foreground "red"
                                          :background "black"}}
                                 6 5)
-                        (insert {})
+                        
                         (insert {:attrs {:foreground "yellow"
                                          :background "black"}}
                                 12 4))
@@ -341,10 +341,37 @@
 (defn find-one-at-idx [tree idx]
   (first (find tree idx (inc idx) first)))
 
-(defn insert-str [text ins-offset arg]
+(defn insert-to-str [text ins-offset arg]
   (let [low (subs text 0 ins-offset)
         high (subs text ins-offset)]
     (str low arg high)))
+
+(defn insert-lines [lines idx text]
+  (reduce (fn [[lines offset] line]
+            [(insert lines line offset (count line))
+             (+ offset (count line))])
+          [lines idx]
+          (split-lines text)))
+
+
+(defn delete-lines [lines lines-to-delete]
+  (let [[_ [start-idx _]] (first lines-to-delete)
+        [last-line [last-line-idx _]] (last lines-to-delete)
+        end-idx (+ last-line-idx (count last-line))]
+    (delete lines start-idx end-idx first)))
+
+
+(comment
+  (let [tree (-> (make-tree)
+                 (insert-str "hello" 0)
+                 (insert-str "hello2" 0)
+                 (insert-str "hello34" 0))
+        lines (find tree 8 14 first)]
+    (delete-lines tree lines))
+  )
+
+(defn delete-from-str [text from count]
+  (str (subs text 0 from) (subs text (+ from count))))
 
 (defn play [[{:keys [lines markup] :as model} idx] [op arg]]
   (case op
@@ -352,11 +379,7 @@
     :insert (let [[text [offset num]] (or (find-one-at-idx lines (dec idx))
                                           ["" [0 0]])
                   lines (delete lines num (inc num) second)
-                  [lines _]  (reduce (fn [[lines offset] line]
-                                       [(insert lines line offset (count line))
-                                        (+ offset (count line))])
-                                     [lines idx]
-                                     (split-lines (insert-str text (- idx offset) arg)))
+                  [lines _]  (insert-lines lines idx (insert-to-str text (- idx offset) arg))
                   [marker [marker-offset marker-num]] (find-one-at-idx markup idx)
                   markup (if marker
                            (let [new-marker (assoc marker :length (+ (:length marker) (count arg)))]
@@ -366,7 +389,22 @@
                            (insert markup {:length (count arg)} idx (count arg)))]
               [(-> model
                    (assoc :markup markup)
-                   (assoc :lines lines)) (+ idx (count  arg))])))
+                   (assoc :lines lines)) (+ idx (count  arg))])
+    :delete (let [intersecting-lines (find lines idx (+ idx arg) first)
+                  lines (delete-lines lines intersecting-lines)]
+              (if (= 1 (count intersecting-lines))
+                (let [[text [offset _]] (first intersecting-lines)
+                      relative-offset (- idx offset)]
+                  (insert-lines lines offset (delete-from-str text relative-offset arg)))
+                (let [[text-first [offset-first _]] (first intersecting-lines)
+                      [text-last [offset-last _]] (last intersecting-lines)
+                      first-rel-offset (- idx offset-first)
+                      last-rel-offset (- (+ arg idx) offset-last)
+                      first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
+                      last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
+                  (insert-lines lines offset-first (concat first-line-trimmed
+                                                           last-line-trimmed))))
+              )))
 
 (comment
 
@@ -381,13 +419,17 @@
   (split-lines (insert-str "Hello world" 11 "\n fuck you"))
   
   (find-one-at-idx (make-tree) 0)
-  (-> [{:lines (make-tree)
-          :markup (make-tree)
-          } 0]
-        (play [:insert "Hello world 1"])
-        (play [:insert "\n fuck you 222 \n"])
-        (play [:insert "hello again 44"])
-        )
+  (def hello-model (first (-> [{:lines (make-tree)
+                                :markup (make-tree)
+                                } 0]
+                              (play [:insert "Hello world 22"])
+                              (play [:insert "\n fuck you\n 333"])
+                              (play [:insert "hello again 44444"])
+                              )))
+
+  (-> [hello-model 0]
+      (play [:retain 4])
+      (play [:delete 7]))
   )
 
 (clojure.string/split-lines "abc")
