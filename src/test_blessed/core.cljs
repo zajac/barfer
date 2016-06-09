@@ -130,7 +130,9 @@
 
 (defn editor [markup-db model]
   [box
-   {:height "100%" :width "100%" :left 100 :top 40}
+   {:border {:type :line}
+    :style {:border {:fg "red"}}
+    :height "100%" :width "100%" :left 100 :top 40}
    (map-indexed
     (fn [i l]
       [:box
@@ -159,7 +161,7 @@
 
 (def thresh 3)
 
-(defn split [children data]
+(defn split-subtree [children data]
   (let [c (count children)]
     (if (> c thresh)
       (let [[left right] (split-at (quot c 2) children)
@@ -177,7 +179,7 @@
                      children))
         [low high] (split-at idx children)]
     (-> (concat low [(make-leaf s [len 1])] high)
-        (split (sum data [len 1])))))
+        (split-subtree (sum data [len 1])))))
 
 (defn intersects? [[from1 to1] [from2 to2]]
   (< (max from1 from2) (min to1 to2)))
@@ -187,19 +189,21 @@
   (intersects? [1 5] [3 10])
   (intersects? [1 5] [5 6]))
 
-(defn find [[children data :as tree] acc from to select]
-  (if (not (leaf? tree))
-    (second
-     (reduce (fn [[acc res] c]
-               (let [sel (select (second c))
-                     acc-sel (select acc)]
-                 [(sum acc sel)
-                  (if (intersects? [from to] [acc-sel (+ acc-sel sel)])
-                    (concat res (find c acc from to select))
-                    res)]))
-             [acc []]
-             children))
-    [[children acc]]))
+(defn find
+  ([tree from to select] (find tree [0 0] from to select))
+  ([[children data :as tree] acc from to select]
+   (if (not (leaf? tree))
+     (second
+      (reduce (fn [[acc res] c]
+                (let [sel (select (second c))
+                      acc-sel (select acc)]
+                  [(sum acc (second c))
+                   (if (intersects? [from to] [acc-sel (+ acc-sel sel)])
+                     (concat res (find c acc from to select))
+                     res)]))
+              [acc []]
+              children))
+     [[children acc]])))
 
 (defn contains-range? [[from1 to1] [from2 to2]]
   (and  (<= from1 from2) (<= to2 to1)))
@@ -224,29 +228,31 @@
      data]
     tree))
 
-(defn delete [[children data :as tree] acc from to select]
-  (if (leaf? tree)
-    tree
-    (let [[_ children]
-          (reduce (fn [[acc res] c]
-                    (let [sel (select (second c))]
-                      [(+ acc sel)                     
-                       (cond
-                         (contains-range? [from to] [acc (+ acc sel)])
-                         res
-                         
-                         (intersects? [from to] [acc (+ acc sel)])
-                         (conj res (delete c acc from to select))
+(defn delete
+  ([tree from to select] (delete tree 0 from to select))
+  ([[children data :as tree] acc from to select]
+   (if (leaf? tree)
+     tree
+     (let [[_ children]
+           (reduce (fn [[acc res] c]
+                     (let [sel (select (second c))]
+                       [(+ acc sel)                     
+                        (cond
+                          (contains-range? [from to] [acc (+ acc sel)])
+                          res
+                          
+                          (intersects? [from to] [acc (+ acc sel)])
+                          (conj res (delete c acc from to select))
 
-                         :default
-                         (conj res c))]))
-                  [acc []]
-                  children)]
-      (merge-subtrees
-       [children (reduce (fn [acc [_ s]]
-                           (sum acc s))
-                         [0 0]
-                         children)]))))
+                          :default
+                          (conj res c))]))
+                   [acc []]
+                   children)]
+       (merge-subtrees
+        [children (reduce (fn [acc [_ s]]
+                            (sum acc s))
+                          [0 0]
+                          children)])))))
 
 (comment
 
@@ -257,12 +263,12 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (delete 0 3 8 first)
+      (delete 3 8 first)
       )
   
   (-> (make-tree)
       (insert "abc" 0 3)
-      (delete 0 0 10 first)
+      (delete 0 10 first)
       )
   
   (-> (make-tree)
@@ -271,7 +277,7 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (delete 0 3 8 first)
+      (delete 3 8 first)
       )
 
   (-> (make-tree)
@@ -280,7 +286,7 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (delete 0 3 800 first)
+      (delete 3 800 first)
       )
 
   (-> (make-tree)
@@ -289,7 +295,7 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (find 0 3 7 first)
+      (find  6 700 first)
       )
 
   (-> (make-tree)
@@ -298,17 +304,95 @@
       (insert "123" 3 3)
       (insert "asddgdfgdfg" 9 11)
       (insert "22" 6 2)
-      (delete 0 1 2 second)
-      )
+      (delete 1 2 second)
+      ) 
   )
 
+(defn insert-str [tree str offset]
+  (insert tree str offset (count str)))
 
+(def model {:markup (-> (make-tree)
+                        (insert {:attrs {:foreground "red"
+                                         :background "black"}}
+                                6 5)
+                        (insert {})
+                        (insert {:attrs {:foreground "yellow"
+                                         :background "black"}}
+                                12 4))
+            :lines (-> (make-tree)
+                       (insert-str "hello world\n" 0)
+                       (insert-str "fuck you\n" 12))
+            })
 
+(defn split-lines [s]
+  (->> s
+       (clojure.string/split-lines)
+       (interpose "\n")
+       (vec)
+       (#(conj % (if (= (last s) \newline) "\n" nil)))       
+       (partition 2)
+       (map (partial apply str))))
 
+(comment
+  (split-lines "abc\nc\n")
+  (interpose "\n" [1 2 3])
+  )
 
+(defn find-one-at-idx [tree idx]
+  (first (find tree idx (inc idx) first)))
 
+(defn insert-str [text ins-offset arg]
+  (let [low (subs text 0 ins-offset)
+        high (subs text ins-offset)]
+    (str low arg high)))
 
+(defn play [[{:keys [lines markup] :as model} idx] [op arg]]
+  (case op
+    :retain [model (+ idx arg)]
+    :insert (let [[text [offset num]] (or (find-one-at-idx lines (dec idx))
+                                          ["" [0 0]])
+                  lines (delete lines num (inc num) second)
+                  [lines _]  (reduce (fn [[lines offset] line]
+                                       [(insert lines line offset (count line))
+                                        (+ offset (count line))])
+                                     [lines idx]
+                                     (split-lines (insert-str text (- idx offset) arg)))
+                  [marker [marker-offset marker-num]] (find-one-at-idx markup idx)
+                  markup (if marker
+                           (let [new-marker (assoc marker :length (+ (:length marker) (count arg)))]
+                             (-> markup
+                                 (delete marker-num (inc marker-num) second)
+                                 (insert new-marker marker-offset (:length new-marker))))
+                           (insert markup {:length (count arg)} idx (count arg)))]
+              [(-> model
+                   (assoc :markup markup)
+                   (assoc :lines lines)) (+ idx (count  arg))])))
 
+(comment
+
+  
+  (let [[lines _] (reduce (fn [[lines offset] line]
+                            [(insert lines line offset (count line))
+                             (+ offset (count line))])
+                          [(insert (make-tree) "Hello world" 0 11) 11] 
+                          (split-lines (insert-str "" (- 11 0) "\n fuck you")))]
+    lines)
+  
+  (split-lines (insert-str "Hello world" 11 "\n fuck you"))
+  
+  (find-one-at-idx (make-tree) 0)
+  (-> [{:lines (make-tree)
+          :markup (make-tree)
+          } 0]
+        (play [:insert "Hello world 1"])
+        (play [:insert "\n fuck you 222 \n"])
+        (play [:insert "hello again 44"])
+        )
+  )
+
+(clojure.string/split-lines "abc")
+
+(str "abc" nil)
 
 (defn main []
   (prn "load")   
