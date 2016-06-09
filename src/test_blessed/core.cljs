@@ -142,55 +142,132 @@
 (defn -editor []
   [editor (atom markup) (rea/atom ds)])
 
-(def cmp1 (fn [[_ l1] [_ l2]]
-            (< l1 l2)))
-
 (defn make-tree [data]
-  [[] data])
+  ['() data])
 
 (def thresh 3)
+
+
 
 (defn split [children data]
   (let [c (count children)]
     (if (> c thresh)
       (let [[left right] (split-at (quot c 2) children)
             sub-sum #(reduce + (map second %))]
-        [(vector [(vec left) (sub-sum left)] [(vec right) (sub-sum right)]) data])
+        [(list [left (sub-sum left)] [right (sub-sum right)]) data])
       [children data])))
 
-
 (defn insert [[children data] s offset]
-  (-> (reduce (fn [[new-children offset-acc done] [e l]]
-                (let [[new-children offset-acc done]
-                      (if (and (not done) (> (+ l offset-acc) offset))
-                        [(conj new-children [s (count s)]) (+ offset-acc l) true]
-                        [new-children (+ offset-acc l) done])]
-                  [(if e
-                     (conj new-children [e l])
-                     new-children) offset-acc done]))
-              [[] 0 false]
-              (conj children [nil 10000]))
-      (first)
-      (split (+ data (count s)))))
+  (let [idx (first
+             (reduce (fn [[idx acc] [_ l]]
+                       (if (> (+ l acc) offset)
+                         (reduced [idx acc])
+                         [(inc idx) (+ l acc)]))
+                     [0 0]
+                     children))
+        [low high] (split-at idx children)]
+    (-> (concat low [[s (count s)]] high)
+        (split (+ data (count s))))))
+
+(defn intersects? [[from1 to1] [from2 to2]]
+  (< (max from1 from2) (min to1 to2)))
 
 (comment
-  
-  (-> (make-tree 0)
-      (insert "abc" 0)
-      (insert "abd" 3)
-      (insert "123" 3)
-      (insert "22" 6)
-      (insert "555" 6)
-      (insert "asdfasdfsadfsf" 17)
-      )
+  (intersects? [1 5] [2 3])
+  (intersects? [1 5] [3 10])
+  (intersects? [1 5] [5 6]))
+
+(defn find [[children data] acc from to]
+  (if (not (string? children))
+    (second
+     (reduce (fn [[acc res] c]
+               [(+ acc (second c))
+                (if (intersects? [from to] [acc (+ acc (second c))])
+                  (concat res (find c acc from to))
+                  res)])
+             [acc []]
+             children))
+    [children]))
+
+(defn contains-range? [[from1 to1] [from2 to2]]
+  (and  (<= from1 from2) (<= to2 to1)))
+
+(comment
+  (contains-range? [1 5] [2 3])
+  (contains-range? [1 5] [3 5])
   
   )
 
+(defn merge-subtrees [[children data :as tree]]
+  (if (<= (reduce (fn [acc [c _]]
+                   (+ acc (count c)))
+                 0 children)
+         thresh)
+    [(mapcat
+      (fn [[children _ :as c]]
+        (if (string? children)
+          [c]
+          children))
+      children)
+     data]
+    tree))
 
+(defn delete [[children data] acc from to]
+  (if (string? children)
+    [children data]
+    (let [[_ children]
+          (reduce (fn [[acc res] c]
+                    [(+ acc (second c))                     
+                     (cond
+                       (contains-range? [from to] [acc (+ acc (second c))])
+                       res
+                       
+                       (intersects? [from to] [acc (+ acc (second c))])
+                       (conj res (delete c acc from to))
 
+                       :default
+                       (conj res c))])
+                  [acc []]
+                  children)]
+      (merge-subtrees
+       [children (reduce (fn [acc [_ s]]
+                           (+ acc s))
+                         0
+                         children)]))))
 
+(comment
+  (-> (make-tree 0)
+      (insert "abc" 0)
+      (insert "bcd" 3)
+      (insert "123" 3)
+      (insert "asddgdfgdfg" 9)
+      (insert "22" 6)
+      (delete 0 3 8)
+      )
+  
+  (-> (make-tree 0)
+      (insert "abc" 0)
+      (delete 0 0 10)
+      )
+  
+  (-> (make-tree 0)
+      (insert "abc" 0)
+      (insert "bcd" 3)
+      (insert "123" 3)
+      (insert "asddgdfgdfg" 9)
+      (insert "22" 6)
+      (delete 0 3 8)
+      )
 
-
+  (-> (make-tree 0)
+      (insert "abc" 0)
+      (insert "bcd" 3)
+      (insert "123" 3)
+      (insert "asddgdfgdfg" 9)
+      (insert "22" 6)
+      (delete 0 3 800)
+      )
+  )
 
 (defn main []
   (prn "load")   
