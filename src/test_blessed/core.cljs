@@ -21,104 +21,10 @@
 (defonce kh (.key screen #js ["p"] #(scroll!)))
 (defonce qh (.key screen #js ["C-c"] #(js/process.exit 0)))
 
-(def markup {0 {:startPos {:line 0
-                           :col 0}
-                :endPos {:line 0
-                         :col 5}
-                :attrs {:foreground "red"
-                        :background "black"}}
-             1 {
-                :startPos {:line 0
-                           :col 6}
-                :endPos {:line 0
-                         :col 12}
-                :attrs {:foreground "yellow"
-                        :background "black"}}})
-
-(def ds [{:num 0
-          :offset 0
-          :markup [0 1]
-          :text "hello world"}
-         {:offset 12
-          :num 1
-          :markup []
-          :text "fuck you"}])
 
 (defn box [m ch]
   (into [:box m] ch))
 
-(defn split-by-markup [markup-db {:keys [text num markup]}]
-  (let [markups (conj (into [nil] (map markup-db markup)) nil)]
-    (->> markups
-     (partition 2 1)
-     (mapcat (fn [[p n]]
-               (let [{{n-line :line
-                       n-start :col} :startPos}  n
-                     {{p-start-line :line
-                       p-start :col} :startPos
-                      {p-end-line :line
-                       p-end :col} :endPos} p
-                     
-                     n-start (if (< n-line num)
-                               0
-                               n-start)
-                     
-                     p-start (if (< p-start-line num)
-                               0
-                               p-start) 
-                     p-end (if (> p-end-line num)
-                             (count text)
-                             p-end)]
-                 (cond
-                   (and (nil? p) (nil? n)) [[text nil]]
-                   (nil? p) [[(subs text 0 n-start) nil]]
-                   (nil? n) [[(subs text p-start p-end) p]
-                             [(subs text p-end (count text)) nil]]
-                   :default [[(subs text p-start p-end) p]
-                             [(subs text p-end n-start) nil]]))))
-     (filter (comp not-empty first)))))
-
-(comment
-  (split-by-markup {0 {:attrs {:foreground "red"}
-                       :startPos {:line 0 :col 5}
-                       :endPos {:line 0 :col 8}}}
-                   {:num 0 :text "fuck you" :markup [0]})
-
-  (split-by-markup {0 {:attrs {:foreground "red"}
-                       :startPos {:line -1 :col 5}
-                       :endPos {:line 0 :col 5}}}
-                   {:num 0 :text "fuck you" :markup [0]})
-
-  (split-by-markup {0 {:attrs {:foreground "red"}
-                       :startPos {:line 0 :col 5}
-                       :endPos {:line 1 :col 5}}}
-                   {:num 0 :text "fuck you" :markup [0]})
-
-  (split-by-markup {0 {:attrs {:foreground "red"}
-                       :startPos {:line 0 :col 5}
-                       :endPos {:line 0 :col 8}}
-                    1 {:attrs {:foreground "yellow"}
-                       :startPos {:line 0 :col 12}
-                       :endPos {:line 1 :col 5}}}
-                   {:num 0 :text "fuck you the world" :markup [0 1]})
-)
-
-(defn line [markup-db l]
-  [box {:top 0
-        :left 0
-        :width "100%"
-        :heigh 1}
-   (->> (split-by-markup markup-db l)
-        (reduce (fn [[acc offset] [str {{:keys [foreground background]} :attrs}]]
-                  [(conj acc
-                         [:box
-                          {:fg foreground
-                           :bg background
-                           :width (count str)
-                           :left offset}
-                          str])
-                   (+ offset (count str))]) [[] 0])
-        first)])
 
 (comment
 
@@ -127,22 +33,6 @@
                 :markup [0 1]
                 :text "hello world"})
   )
-
-(defn editor [markup-db model]
-  [box
-   {:border {:type :line}
-    :style {:border {:fg "red"}}
-    :height "100%" :width "100%" :left 100 :top 40}
-   (map-indexed
-    (fn [i l]
-      [:box
-       {:top i 
-        :height 1
-        :width "100%"}
-       [line @markup-db l]]) @model)])
-
-(defn -editor []
-  [editor (atom markup) (rea/atom ds)])
 
 (defn make-leaf [e d]
   (with-meta [e d] {:leaf? true}))
@@ -192,7 +82,6 @@
 (defn query
   ([tree from to select] (query tree [0 0] from to select))
   ([[children data :as tree] acc from to select]
-   (prn acc tree from to)
    (if (not (leaf? tree))
      (second
       (reduce (fn [[acc res] c]
@@ -257,6 +146,12 @@
 
 (comment
 
+  (-> (make-tree)
+      (insert-str "abc" 0)
+      (insert-str "aa" 3)
+      (delete 0 3 first)
+      (insert-str "abcdefaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" 0))
+
   
   (-> (make-tree)
       (insert "abc" 0 3)
@@ -311,19 +206,6 @@
 
 (defn insert-str [tree str offset]
   (insert tree str offset (count str)))
-
-(def model {:markup (-> (make-tree)
-                        (insert {:attrs {:foreground "red"
-                                         :background "black"}}
-                                6 5)
-                        
-                        (insert {:attrs {:foreground "yellow"
-                                         :background "black"}}
-                                12 4))
-            :lines (-> (make-tree)
-                       (insert-str "hello world\n" 0)
-                       (insert-str "fuck you\n" 12))
-            })
 
 (defn split-lines [s]
   (->> s
@@ -458,47 +340,209 @@
                        :markup (delete-from-markup-tree markup idx arg)})
               idx]))
 
+(defn split-by-markup [markup [text [line-offset number]]]
+  (->> markup
+       (map (fn [[{:keys [attrs length]} [marker-offset _]]]
+              (let [rel-offset (- marker-offset line-offset)]
+                {:attrs attrs
+                 :text (clojure.string/trim-newline (subs text rel-offset (+ rel-offset length)))})))
+       (filter (complement (comp empty? :text)))))
+
+(comment
+  (split-by-markup [[{:attrs {:foreground "red"}
+                      :length 3} [0 0]]
+                    [{:length 1000} [3 0]]]
+                   ["Hellolo" [0 0]])
+)
+
+
+(def model (first (-> [{:lines (->
+                                (make-tree)
+                                (insert-str "Hello world\n" 0)
+                                (insert-str "fuck you" 12))
+                        :markup (->
+                                 (make-tree)
+                                 (insert {:length 5
+                                          :attrs {:foreground "red"
+                                                  :background "black"}} 0 5)
+                                 (insert {:length 14} 6 14)
+                                 )
+                        :caret {:line 0
+                                :col 0}} 0]
+                      (play [:insert "Hello world 22"])
+                      (play [:insert "\n fuck you\n 333"])
+                      (play [:insert "hello again 44444"])
+                      )))
+
+
+(defn line [markup l]
+  [box {:top 0
+        :left 0
+        :width "100%"
+        :heigh 1}
+   (->> (split-by-markup markup l)
+        (reduce (fn [[acc offset] {{:keys [foreground background]} :attrs
+                                   text :text}]
+                  [(conj acc
+                         [:box
+                          {:fg foreground
+                           :bg background
+                           :width (count text)
+                           :left offset}
+                          text])
+                   (+ offset (count text))]) [[] 0])
+        first)])
+
+(defn editor [model]
+  (let [lines (query (:lines @model) 0 40 second)
+        markup (:markup @model)
+        markers (query markup 0 10000 first)
+        caret (:caret @model)]
+    [box
+     {:border {:type :line}
+      :style {:border {:fg "red"}}
+      :height "40%" :width "40%"
+      :left "center" :top "center"}
+     (concat (map-indexed
+            (fn [i l]
+              [:box
+               {:top i 
+                :height 1
+                :width "100%"}
+               [line markers l]]) lines)
+             [[:box
+                {:top (:line caret)
+                 :left (:col caret)
+                 :height 1
+                 :width 1
+                 :style {:bg "green"
+                         :transparent true}}
+               " "]])]))
+
+(defonce model-ptr (rea/atom model))
+
+(defn -editor []
+  [editor model-ptr])
+
+(defn get-line-size [lines num]
+  (let [[text [offset _]] (first (query lines num (inc num) second))]
+    (if (not= \newline (last text))
+      (count text)
+      (dec (count text)))))
+
+(comment
+  (get-line-size (:lines @model-ptr) 0)
+  (wrap-cursor (:lines @model-ptr) {:line 0 :col 13})
+  (restrain-cursor (:lines @model-ptr) {:line 0 :col 15})
+  )
+
+(defn wrap-cursor [lines {:keys [col line] :as caret}]
+  (let [current-line-size (get-line-size lines line)
+        last-line-idx (dec (second (second lines)))]
+    (cond
+      (and (not= line last-line-idx) (> col current-line-size) ) {:col 0 :line (inc line)}
+      (and (< col 0) (not= line 0)) {:col (get-line-size lines (dec line))
+                                     :line  (dec line)}
+      :default {:col (max 0 (min current-line-size col))
+                :line (max line 0)})))
+
+(defn move-cursor [{:keys [lines] :as model} dir]
+  (update model :caret
+          (fn [{:keys [line col] :as caret}]
+            (let [last-line-idx (dec (second (second lines)))
+                  next-line-fixed (min (inc line) last-line-idx)]
+              (->> 
+                     (case dir
+                       :down {:line next-line-fixed
+                              :col (min col (get-line-size lines next-line-fixed))}
+                       :up {:line (dec line)
+                            :col (min col (get-line-size lines (dec line)))}
+                       :left (update caret :col dec)
+                       :right (update caret :col inc)
+                       caret)
+                     (wrap-cursor lines))))))
+
+
+
+
+(defn move-cursor! [dir]
+  (swap! model-ptr
+         move-cursor dir))
+
+(comment
+  (move-cursor @model-ptr :down)
+  )
+
+(defn pos->offset [{:keys [line col]} lines]
+  (when-let [[_ [line-offset _]]
+             (first (query lines line (inc line) second))]
+    (+ line-offset col)))
+
+(defn doc-len [lines]
+  (first (second lines)))
+
+(defn lines-count [lines]
+  (second (second lines)))
+
+(defn offset->pos [offset lines]
+  (when-let [[_ [line-offset num]] (first (query lines offset (inc offset) first))]
+    {:line num
+     :col (- offset line-offset)}))
+
+(defn ins-op [str {:keys [lines caret]}]
+  (let [caret-offset (pos->offset caret lines)]
+    {:ops [[:retain caret-offset]
+           [:insert str]
+           [:retain (- (doc-len lines) caret-offset)]]
+     :caret (offset->pos (+ (count str) caret-offset) lines)}))
+
+(comment
+  (let [lines (:lines @model-ptr)]
+    (offset->pos 13 lines)
+    (pos->offset {:line 1 :col 3} lines)
+    (ins-op "abcd" @model-ptr)
+    )
+  )
+
+(defn play-op [model ops]
+  (first (reduce play [model 0] ops)))
+
+(defn type-in [model str]
+  (let [{:keys [ops caret]} (ins-op str model)]
+    (-> model                 
+        (play-op ops)
+        (assoc :caret caret))))
+
 (comment
 
+  (ins-op "a" @model-ptr)
   
-  (let [[lines _] (reduce (fn [[lines offset] line]
-                            [(insert lines line offset (count line))
-                             (+ offset (count line))])
-                          [(insert (make-tree) "Hello world" 0 11) 11] 
-                          (split-lines (insert-str "" (- 11 0) "\n fuck you")))]
-    lines)
-  
-  (split-lines (insert-str "Hello world" 11 "\n fuck you"))
-  
-  (find-one-at-idx (make-tree) 0)
-  (def hello-model (first (-> [{:lines (make-tree)
-                                :markup (make-tree)
-                                } 0]
-                              (play [:insert "Hello world 22"])
-                              (play [:insert "\n fuck you\n 333"])
-                              (play [:insert "hello again 44444"])
-                              )))
-  
-  
-  (delete-lines (hello-model :markup) (query (hello-model :markup) 4 (+ 4 7) first) :length)
-  
-  (-> [hello-model 0]
-      (play [:retain 4])
-      (play [:delete 7])
-      (play [:delete 15]))
-  )
+  (type-in @model-ptr "a"))
 
-(clojure.string/split-lines "abc")
+(defn type! [str]
+  (swap! model-ptr type-in str))
 
-(str "abc" nil)
+(defn keys-handler [_ jskey]
+  (let [k (js->clj jskey)
+        n (k "name")]
+    (when (#{"down" "up" "left" "right"} n) (move-cursor! (keyword n)))
+    (when (#{"a"} n) (type! n))))
 
+
+
+(defonce keys-handler-token (atom nil))
+ 
 (defn main []
-  (prn "load")   
+  (prn "load1")   
   (.clearRegion screen 0 (.-width screen) 0 (.-height screen))
   (blessed-render (.createElement js/React (re/reactify-component -editor)) screen)
-  )
+  (when (not @keys-handler-token)
+    (.on screen "keypress" keys-handler))
+  (reset! keys-handler-token 1)
+  (.render screen)
+  ) 
 
-(fw/start {:on-jsload main
-           :websocket-url "ws://localhost:5309/figwheel-ws"})
+(defonce fw (fw/start {:on-jsload test-blessed.core/main
+                       :websocket-url "ws://localhost:5309/figwheel-ws"}))
 
 (set! *main-cli-fn* main)
