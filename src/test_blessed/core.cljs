@@ -350,6 +350,8 @@
   (truncate-marker [5 10] 3 3)
   (truncate-marker [5 10] 0 4)
 
+  (:markup @model-ptr)
+  
   )
 
 (defn delete-from-markup-tree [markup idx cnt]
@@ -502,8 +504,16 @@
                            :width (count text)
                            :left offset}
                           text])
-                   (+ offset (count text))]) [[] 0])
+                   (+ offset (count text))])
+                [[] 0])
         first)])
+
+(comment
+
+  (line (query (:markup @model-ptr) 0 1000  first)
+        (first (query (:lines @model-ptr) 3 4 second)))
+
+  )
 
 (defn editor [model]
   (let [lines (query (:lines @model) 0 40 second)
