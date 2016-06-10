@@ -56,25 +56,31 @@
     (if (> c thresh)
       (let [[left right] (split-at (quot c 2) children)
             sub-sum #(reduce sum (map second %))]
-        [(list [left (sub-sum left)] [right (sub-sum right)]) data])
-      [children data])))
+        [[left (sub-sum left)] [right (sub-sum right)]])
+      [[children data]])))
 
-(defn insert [[children data] s offset len]
-  (let [[idx acc c] (reduce (fn [[idx acc _] [_ [off _] :as c]]
-                         (if (< offset (+ off acc))
-                           (reduced [idx acc c])
-                           [(inc idx) (+ off acc) c]))
-                       [0 0 nil]
-                       children)]
- ;   (prn "idx" idx "acc" acc "c" c)
-    (let [[low high] (split-at idx children)]
-      (-> (concat low [(if (or (leaf? c) (nil? c))                         
-                         (make-leaf s [len 1])
-                         (insert c s (- offset acc) len))]
-                  (if (or (leaf? c) (nil? c))                         
-                    high
-                    (rest high)))
-          (split-subtree (sum data [len 1]))))))
+(defn insert
+  ([t s offset len]
+   (let [[ins & [rest]] (insert t s offset len :fuck)]
+     (if rest
+       [[ins rest] (sum (second t) [len 1])]
+       ins)))
+  ([[children data] s offset len _]
+   (let [[idx acc c] (reduce (fn [[idx acc _] [_ [off _] :as c]]
+                               (if (< offset (+ off acc))
+                                 (reduced [idx acc c])
+                                 [(inc idx) (+ off acc) c]))
+                             [0 0 nil]
+                             children)]
+                                        ;   (prn "idx" idx "acc" acc "c" c)
+     (let [[low high] (split-at idx children)]
+       (-> (concat low (if (or (leaf? c) (nil? c))                         
+                         [(make-leaf s [len 1])]
+                         (insert c s (- offset acc) len :fuck))
+                   (if (or (leaf? c) (nil? c))                         
+                     high
+                     (rest high)))
+           (split-subtree (sum data [len 1])))))))
 
 (split-at 2 [1 2 3 4])
 
@@ -189,6 +195,10 @@
       (insert-str "abc" 0)
       (insert-str "bcd" 3)
       (insert-str "cde" 3)
+      (insert-str "edf" 3)
+      (insert-str "dfg" 3)
+      (insert-str "edf" 3)
+      (insert-str "dfg" 3)
       (insert-str "edf" 3)
       (insert-str "dfg" 3)
       
