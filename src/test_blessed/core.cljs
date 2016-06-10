@@ -60,16 +60,34 @@
       [children data])))
 
 (defn insert [[children data] s offset len]
-  (let [idx (first
-             (reduce (fn [[idx acc] [_ [off _]]]
-                       (if (< offset (+ off acc))
-                         (reduced [idx acc])
-                         [(inc idx) (+ off acc)]))
-                     [0 0]
-                     children))
-        [low high] (split-at idx children)]
-    (-> (concat low [(make-leaf s [len 1])] high)
-        (split-subtree (sum data [len 1])))))
+  (let [[idx acc c] (reduce (fn [[idx acc _] [_ [off _] :as c]]
+                         (if (< offset (+ off acc))
+                           (reduced [idx acc c])
+                           [(inc idx) (+ off acc) c]))
+                       [0 0 nil]
+                       children)]
+ ;   (prn "idx" idx "acc" acc "c" c)
+    (let [[low high] (split-at idx children)]
+      (-> (concat low [(if (or (leaf? c) (nil? c))                         
+                         (make-leaf s [len 1])
+                         (insert c s (- offset acc) len))]
+                  (if (or (leaf? c) (nil? c))                         
+                    high
+                    (rest high)))
+          (split-subtree (sum data [len 1]))))))
+
+(split-at 2 [1 2 3 4])
+
+(comment
+
+  (prn-lines @model-ptr)
+  
+  (-> (make-tree)
+      (insert-str "abc" 0)
+      (insert-str "abc" 0)
+      ;(insert-str "abc" 0)
+      )
+  )
 
 (defn intersects? [[from1 to1] [from2 to2]]
   (< (max from1 from2) (min to1 to2)))
@@ -166,6 +184,16 @@
       (insert "abc" 0 3)
       (delete 0 10 first)
       )
+
+  (-> (make-tree)
+      (insert-str "abc" 0)
+      (insert-str "bcd" 3)
+      (insert-str "cde" 3)
+      (insert-str "edf" 3)
+      (insert-str "dfg" 3)
+      
+
+      )
   
   (-> (make-tree)
       (insert "abc" 0 3)
@@ -231,7 +259,7 @@
 
 (defn insert-lines [lines idx text]
   (first (reduce (fn [[lines offset] line]
-                   #_(prn "INSERTING" "lines" lines "line" line "offset" offset)
+                   ;(prn "INSERTING" "lines" lines "line" line "offset" offset)
                    [(insert lines line offset (count line))
                     (+ offset (count line))])
                  [lines idx]
@@ -616,7 +644,8 @@
     
     (when (#{"down" "up" "left" "right"} n) (move-cursor! (keyword n)))
     (when (#{"a"} n) (type! n))
-    (when (#{"delete"} n) (delete!))))
+    (when (#{"delete"} n) (delete!))
+    (when (#{"enter"} n) (type! "\n"))))
 
 
 
