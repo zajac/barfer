@@ -4,13 +4,14 @@
             [reagent.ratom :as rea]
             [figwheel.client :as fw]
             [test-blessed.doc :as doc]
-            [test-blessed.tree :as t]))
+            [test-blessed.tree :as t]
+            [clojure.string]))
 
 (defonce bl (js/require "blessed"))
 (defonce rbl (js/require "react-blessed"))
 (defonce screen (.screen bl #js {:autopadding true
                                  :smartcsr true
-                                 :title "fuck you"}))
+                                 :title "some title"}))
 (defonce blessed-render (.-render rbl))
 
 (nodejs/enable-util-print!)
@@ -45,7 +46,7 @@
 (def model (first (-> [{:lines (->
                                 (t/make-tree)
                                 (t/insert-str "Hello world\n" 0)
-                                (t/insert-str "fuck you" 12))
+                                (t/insert-str "bless you" 12))
                         :markup (->
                                  (t/make-tree)
                                  (t/insert {:length 5
@@ -56,10 +57,9 @@
                         :caret {:line 0
                                 :col 0}} 0]
                       (doc/play [:insert "Hello world 22"])
-                      (doc/play [:insert "\n fuck you\n 333"])
+                      (doc/play [:insert "\n bless you\n 333"])
                       (doc/play [:insert "hello again 44444"])
                       ))
-
   )
 
 
@@ -73,8 +73,8 @@
                                    text :text}]
                   [(conj acc
                          [:box
-                          {:fg foreground
-                           :bg background
+                          {:fg (or  foreground "green")
+                           :bg (or  background "white")
                            :width (count text)
                            :left offset}
                           text])
@@ -85,7 +85,7 @@
 (comment
 
   (line (t/query (:markup @model-ptr) 0 1000  first)
-        (first (t/query (:lines @model-ptr) 3 4 second)))
+        (first (t/query (:lines @model-ptr) 4 5 second)))
 
   )
 

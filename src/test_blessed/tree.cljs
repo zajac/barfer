@@ -27,7 +27,7 @@
 
 (defn insert
   ([t s offset len]
-   (let [[ins & [rest]] (insert t s offset len :fuck)]
+   (let [[ins & [rest]] (insert t s offset len :impl)]
      (if rest
        [[ins rest] (sum (second t) [len 1])]
        ins)))
@@ -42,7 +42,7 @@
      (let [[low high] (split-at idx children)]
        (-> (concat low (if (or (leaf? c) (nil? c))                         
                          [(make-leaf s [len 1])]
-                         (insert c s (- offset acc) len :fuck))
+                         (insert c s (- offset acc) len :impl))
                    (if (or (leaf? c) (nil? c))                         
                      high
                      (rest high)))
