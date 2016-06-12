@@ -89,31 +89,35 @@
 
   )
 
+(defn caret [{:keys [line col]}]
+  [:box
+   {:top line
+    :left col
+    :height 1
+    :width 1
+    :style {:bg "green"
+            :transparent true}}
+   " "])
+
 (defn editor [model]
   (let [lines (t/query (:lines @model) 0 40 second)
         markup (:markup @model)
-        markers (t/query markup 0 10000 first)
-        caret (:caret @model)]
+        markers (t/query markup 0 10000 first)]
     [box
      {:border {:type :line}
       :style {:border {:fg "red"}}
       :height "40%" :width "40%"
       :left "center" :top "center"}
      (concat (map-indexed
-            (fn [i l]
-              [:box
-               {:top i 
-                :height 1
-                :width "100%"}
-               [line markers l]]) lines)
-             [[:box
-                {:top (:line caret)
-                 :left (:col caret)
-                 :height 1
-                 :width 1
-                 :style {:bg "green"
-                         :transparent true}}
-               " "]])]))
+              (fn [i l]
+                ^{:key i}
+                [:box
+                 {:top i 
+                  :height 1
+                  :width "100%"}
+                 [line markers l]])
+              lines)
+             [[caret (:caret @model)]])]))
 
 (defonce model-ptr (rea/atom model))
 
@@ -171,6 +175,7 @@
     (pos->offset {:line 1 :col 3} lines)
     (ins-op "abcd" @model-ptr)
     )
+  
   )
 
 (defn play-op [model ops]

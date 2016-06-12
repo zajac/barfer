@@ -15,24 +15,19 @@
 
 (defn split-lines [s]
   (->> (.split s "\n")
-       
        (interpose "\n")
-       (vec)
-       
-       (partition 2)
-       (map (partial apply str))))
+       (partition 2 2 [""])
+       (map (partial apply str))
+       (filter (complement empty?))))
 
 (comment
   (split-lines "abc\n\nc\n")
 
-  (-> "abc\n\nabc\n"
-      (.split  "\n")
-      (js->clj)
-      )
-
   (interpose "\n" ["abc" "bcd"])
+
+  (partition 2 ["abc" "cde" "edf"])
   
-  (split-lines "abc\n\nabc\n")
+  (split-lines "abc\n")
   )
 
 (defn insert-lines [lines idx text]
