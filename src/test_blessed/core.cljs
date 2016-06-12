@@ -34,6 +34,8 @@
                       :length 3} [0 0]]
                     [{:length 1000} [3 0]]]
                    ["Hellolo" [0 0]])
+
+  
 )
 
 (defn prn-lines [model]
@@ -52,7 +54,7 @@
                                  (t/insert {:length 5
                                           :attrs {:foreground "red"
                                                   :background "black"}} 0 5)
-                                 (t/insert {:length 14} 6 14)
+                                 (t/insert {:length 16} 6 16)
                                  )
                         :caret {:line 0
                                 :col 0}} 0]
@@ -85,7 +87,7 @@
 (comment
 
   (line (t/query (:markup @model-ptr) 0 1000  first)
-        (first (t/query (:lines @model-ptr) 4 5 second)))
+        (first (t/query (:lines @model-ptr) 3 4 second)))
 
   )
 
@@ -214,8 +216,6 @@
     (when (#{"a"} n) (type! n))
     (when (#{"delete"} n) (delete!))
     (when (#{"enter"} n) (type! "\n"))))
-
-
 
 (defonce keys-handler-token (atom nil))
  

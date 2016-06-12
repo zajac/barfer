@@ -22,12 +22,8 @@
 
 (comment
   (split-lines "abc\n\nc\n")
-
-  (interpose "\n" ["abc" "bcd"])
-
-  (partition 2 ["abc" "cde" "edf"])
-  
   (split-lines "abc\n")
+  (split-lines "abc\n\nabc")
   )
 
 (defn insert-lines [lines idx text]
@@ -60,11 +56,14 @@
                                                 last-line-trimmed))))))
 
 (defn insert-to-lines-tree [lines idx arg]
-  (let [[text [offset num]] (find-one-at-idx lines idx)]
+  (let [affected-lines (t/query lines (dec idx) (inc idx) first)
+        joined-text (reduce (fn [s [text _]] (str s text)) "" affected-lines)
+        [_ [offset num]] (first affected-lines)
+        lines-to-insert (insert-to-str joined-text (- idx (or offset 0)) arg)]
     (-> lines
         (cond-> num
-          (t/delete num (inc num) second))
-        (insert-lines (or offset idx) (insert-to-str (or text "") (- idx (or offset 0)) arg)))))
+          (t/delete num (+ num (count affected-lines)) second))
+        (insert-lines (or offset idx) lines-to-insert))))
 
 (defn insert-to-markup-tree [markup idx count]
   (let [[marker [marker-offset marker-num]] (find-one-at-idx markup idx)]

@@ -80,6 +80,17 @@
               children))
      [[children acc]])))
 
+(comment
+
+  (-> (make-tree)
+      (insert-str "abc" 0)
+      (insert-str "def" 3)
+      (insert-str "ghi" 6)
+      (insert-str "jkl" 9)
+      (insert-str "mno" 12)
+      (query 11 13 first)
+      ))
+
 (defn merge-subtrees [[children data :as tree]]
   (if (<= (reduce (fn [acc [c _]]
                    (+ acc (count c)))
