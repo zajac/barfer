@@ -14,17 +14,25 @@
     (str low arg high)))
 
 (defn split-lines [s]
-  (->> s
-       (clojure.string/split-lines)
+  (->> (.split s "\n")
+       
        (interpose "\n")
        (vec)
-       (#(conj % (if (= (last s) \newline) "\n" nil)))       
+       
        (partition 2)
        (map (partial apply str))))
 
 (comment
-  (split-lines "abc\nc\n")
+  (split-lines "abc\n\nc\n")
 
+  (-> "abc\n\nabc\n"
+      (.split  "\n")
+      (js->clj)
+      )
+
+  (interpose "\n" ["abc" "bcd"])
+  
+  (split-lines "abc\n\nabc\n")
   )
 
 (defn insert-lines [lines idx text]
