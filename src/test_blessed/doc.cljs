@@ -74,6 +74,8 @@
             (t/insert new-marker marker-offset (:length new-marker))))
       (t/insert markup {:length count} idx count))))
 
+
+
 (defn intersection [[start1 end1] [start2 end2]]
   [(max start1 start2) (min end1 end2)])
 
@@ -90,13 +92,77 @@
         [idx new-len]
         [(- offset count) new-len]))))
 
+(defn cut-marker [[offset len] idx count]
+  (->> (cond
+        (not (t/intersects? [offset (+ offset len)] [idx (+ idx count)])) [[offset len]]
+        (<= offset idx (+ offset len) (+ idx count)) [[offset (- idx offset)]]
+        (<= offset idx (+ idx count) (+ offset len)) [[offset (- idx offset)] [(+ idx count) (- (+ offset len) (+ idx count))]]
+        (<= idx offset (+ offset len) (+ idx count)) [[idx (- (+ idx count) (+ len offset))]]
+        (<= idx offset (+ idx count) (+ offset len)) [[(+ idx count) (- (+ offset len) (+ idx count))]]
+        :default '()
+        )
+       (filter (comp (partial < 0) second))))
+
 (comment
+  (cut-marker [0 3] 1 1)
+  (cut-marker [0 3] 1 100)
+  (cut-marker [0 3] 0 1)
+  (cut-marker [0 3] -1 2)
+  (cut-marker [0 1] 5 6)
+  (cut-marker [1 1] 0 2)
+  )
+
+(defn truncate-markers [offset len intersecting]
+  (->> intersecting
+       (mapcat (fn [[marker [marker-offset _]]]
+                 (map (fn [x]
+                        [marker x])
+                      (cut-marker [marker-offset (:length marker)]
+                                  offset len))))
+       (map (fn [[marker [offset len]]]
+              [(assoc marker :length len) offset]))
+       (filter (comp (partial < 0) :length first))))
+
+(comment
+  (truncate-markers 1 2
+                    [[{:id 0 :length 2} [0 nil]]
+                     [{:id 1 :length 3} [2 nil]]])
+  
+  (truncate-markers 0 2
+                    [[{:id 0 :length 1} [0 nil]]
+                     [{:id 1 :length 1} [1 nil]]])
+
+  
+  )
+
+(defn add-marker [markup m offset]
+  (let [intersecting (t/query markup offset (+ offset (:length m)) first)]
+    (reduce (fn [markup [m offset]]
+              (t/insert markup m offset (:length m)))
+            (delete-lines markup intersecting :length)
+            (->> intersecting
+                 (truncate-markers offset (:length m))
+                 (concat [[m offset]])
+                 (sort-by second)))))
+
+(comment
+  (-> (t/make-tree)
+      (add-marker {:length 1} 0)
+      (add-marker {:length 1} 1) 
+
+      (add-marker {:length 2} 0) ; => [0 2]
+      (add-marker {:length 3} 1) ; => [0 1] [1 4]
+      (add-marker {:length 2} 1) ; => [0 1] [1 3] [3 4]
+      (t/query 0 1000 first))
+  
   (truncate-marker [0 5] 0 3)
   (truncate-marker [0 5] 2 5)
   (truncate-marker [0 5] 2 1)
   (truncate-marker [5 10] 3 3)
-  (truncate-marker [5 10] 0 4)
-  )
+
+  
+  (truncate-marker [5 10] 0 4))
+  
 
 (defn delete-from-markup-tree [markup idx cnt]
   (let [intersecting-markups (t/query markup idx (+ idx cnt) first)
@@ -131,7 +197,7 @@
                  (t/insert-str "hello2" 0)
                  (t/insert-str "hello34" 0))
         lines (t/query tree 8 14 first)]
-    (delete-lines tree lines))
+    (delete-lines tree lines count))
   )
 
 
