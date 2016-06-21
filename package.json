@@ -1,17 +1,17 @@
 {
-  "name": "test-blessed",
-  "version": "0.1.0",
-  "private": "true",
-  "engines": {
-    "node": "0.12.x"
-  },
+    "name": "barfer",
+    "version": "0.1.0",
+    "private": "true",
+    "engines": {
+        "node": "0.12.x"
+    },
     "dependencies": {
         "react": "0.14.0",
         "blessed" : "0.1.81"
         "react-blessed" : "0.1.7"
-  },
-  "devDependencies": {
-    "source-map-support": "0.4.0",
-    "ws": "0.8.1"
-  }
+    },
+    "devDependencies": {
+      "source-map-support": "0.4.0",
+        "ws": "0.8.1"
+    }
 }

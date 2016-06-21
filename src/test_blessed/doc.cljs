@@ -1,5 +1,5 @@
-(ns test-blessed.doc
-  (:require [test-blessed.tree :as t]
+(ns barfer.doc
+  (:require [barfer.tree :as t]
             [clojure.string]))
 
 (defn delete-from-str [text from count]
@@ -112,7 +112,7 @@
   (cut-marker [1 1] 0 2)
   )
 
-(defn truncate-markers [offset len intersecting]
+(defn cut-markers [offset len intersecting]
   (->> intersecting
        (mapcat (fn [[marker [marker-offset _]]]
                  (map (fn [x]
@@ -141,7 +141,7 @@
               (t/insert markup m offset (:length m)))
             (delete-lines markup intersecting :length)
             (->> intersecting
-                 (truncate-markers offset (:length m))
+                 (cut-markers offset (:length m))
                  (concat [[m offset]])
                  (sort-by second)))))
 
@@ -153,12 +153,14 @@
       (add-marker {:length 2} 0) ; => [0 2]
       (add-marker {:length 3} 1) ; => [0 1] [1 4]
       (add-marker {:length 2} 1) ; => [0 1] [1 3] [3 4]
+      (add-marker {:length 4} 0)
       (t/query 0 1000 first))
   
   (truncate-marker [0 5] 0 3)
   (truncate-marker [0 5] 2 5)
   (truncate-marker [0 5] 2 1)
   (truncate-marker [5 10] 3 3)
+  (cut-marker [0 1] 0 4)
 
   
   (truncate-marker [5 10] 0 4))

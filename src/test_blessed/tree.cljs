@@ -1,4 +1,4 @@
-(ns test-blessed.tree)
+(ns barfer.tree)
 
 (defn make-leaf [e d]
   (with-meta [e d] {:leaf? true}))
@@ -15,7 +15,7 @@
 (defn make-tree []
   ['() [0 0]])
 
-(def thresh 3)
+(def thresh 32)
 
 (defn split-subtree [children data]
   (let [c (count children)]
@@ -80,6 +80,13 @@
               children))
      [[children acc]])))
 
+(defn prn-lines [line]
+  (reduce
+   (fn [s [text _]]
+     (str s text))
+   ""
+   line))
+
 (comment
 
   (-> (make-tree)
@@ -88,7 +95,8 @@
       (insert-str "ghi" 6)
       (insert-str "jkl" 9)
       (insert-str "mno" 12)
-      (query 11 13 first)
+      (query model 3 100000 first)
+      ;(prn-lines)
       ))
 
 (defn merge-subtrees [[children data :as tree]]
@@ -207,9 +215,10 @@
       (delete 1 2 second)
       ) 
   )
+
 (comment
 
-  (prn-lines @model-ptr)
+  
   
   (-> (make-tree)
       (insert-str "abc" 0)

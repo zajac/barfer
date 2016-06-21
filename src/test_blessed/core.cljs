@@ -1,10 +1,10 @@
-(ns test-blessed.core
+(ns barfer.core
   (:require [cljs.nodejs :as nodejs]
             [reagent.core :as re]
             [reagent.ratom :as rea]
             [figwheel.client :as fw]
-            [test-blessed.doc :as doc]
-            [test-blessed.tree :as t]
+            [barfer.doc :as doc]
+            [barfer.tree :as t]
             [clojure.string]))
 
 (defonce bl (js/require "blessed"))
@@ -173,12 +173,11 @@
 
 (comment
   (let [lines (:lines @model-ptr)]
-    (offset->pos 13 lines)
-    (pos->offset {:line 1 :col 3} lines)
-    (ins-op "abcd" @model-ptr)
-    )
+    (doc/offset->pos 13 lines)
+    (doc/pos->offset {:line 1 :col 3} lines)
+    (ins-op "abcd" @model-ptr)))
   
-  )
+  
 
 (defn play-op [model ops]
   (first (reduce doc/play [model 0] ops)))
@@ -226,8 +225,7 @@
   (when (not @keys-handler-token)
     (.on screen "keypress" keys-handler))
   (reset! keys-handler-token 1)
-  (.render screen)
-  ) 
+  (.render screen)) 
 
 (defonce fw (fw/start {:on-jsload test-blessed.core/main
                        :websocket-url "ws://localhost:5309/figwheel-ws"}))

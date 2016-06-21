@@ -1,5 +1,5 @@
-(defproject test-blessed "0.1.0-SNAPSHOT"
-  :description "FIXME: write this!"
+(defproject barfer "0.1.0-SNAPSHOT"
+  :description "Text editor with syntax highlighting with persistent datastructures"
   :url "http://example.com/FIXME"
 
   :min-lein-version "2.5.3"
@@ -27,8 +27,8 @@
               :source-paths ["src"]
               :figwheel true
               :compiler {
-                :main test-blessed.core
-                :output-to "target/server_dev/test_blessed.js"
+                :main barfer.core
+                :output-to "target/server_dev/barfer.js"
                 :output-dir "target/server_dev"
                 :target :nodejs
                 :optimizations :none
