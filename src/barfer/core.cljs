@@ -227,7 +227,7 @@
   (reset! keys-handler-token 1)
   (.render screen)) 
 
-(defonce fw (fw/start {:on-jsload test-blessed.core/main
+(defonce fw (fw/start {:on-jsload barfer.core/main
                        :websocket-url "ws://localhost:5309/figwheel-ws"}))
 
 (set! *main-cli-fn* main)
