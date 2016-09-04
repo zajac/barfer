@@ -6,11 +6,8 @@
 (defn leaf? [n]
   (:leaf? (meta n)))
 
-(defn sum [[x1 y1] [x2 y2]]
-  [(+ x1 x2) (+ y1 y2)])
-
-(defn less? [[o1 _] [o2 _]]
-  (< o1 o2))
+(defn sum [i j]
+  (vec (map + i j)))
 
 (defn make-tree []
   ['() [0 0]])
@@ -68,16 +65,16 @@
   ([tree from to select] (query tree [0 0] from to select))
   ([[children data :as tree] acc from to select]
    (if (not (leaf? tree))
-     (second
-      (reduce (fn [[acc res] c]
-                (let [sel (select (second c))
-                      acc-sel (select acc)]
-                  [(sum acc (second c))
-                   (if (intersects? [from to] [acc-sel (+ acc-sel sel)])
-                     (concat res (query c acc from to select))
-                     res)]))
-              [acc []]
-              children))
+     (->> children
+          (reduce (fn [[acc res] c]
+                    (let [sel (select (second c))
+                          acc-sel (select acc)]
+                      [(sum acc (second c))
+                       (if (intersects? [from to] [acc-sel (+ acc-sel sel)])
+                         (concat res (query c acc from to select))
+                         res)]))
+                  [acc []])
+          second)
      [[children acc]])))
 
 (defn prn-lines [line]
@@ -95,7 +92,7 @@
       (insert-str "ghi" 6)
       (insert-str "jkl" 9)
       (insert-str "mno" 12)
-      (query model 3 100000 first)
+      ;(query 3 100000 first)
       ;(prn-lines)
       ))
 
