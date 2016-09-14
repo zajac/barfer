@@ -42,18 +42,19 @@
 (defn delete-from-lines-tree [lines idx arg]
   (let [intersecting-lines (t/query lines idx (+ idx arg 1) first)        
         lines (delete-lines lines intersecting-lines count)]
-      (if (= 1 (count intersecting-lines))
-        (let [[text [offset _]] (first intersecting-lines)
-              relative-offset (- idx offset)]
-          (insert-lines lines offset (delete-from-str text relative-offset arg)))
-        (let [[text-first [offset-first _]] (first intersecting-lines)
-              [text-last [offset-last _]] (last intersecting-lines)
-              first-rel-offset (- idx offset-first)
-              last-rel-offset (- (+ arg idx) offset-last)
-              first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
-              last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
-          (insert-lines lines offset-first (str first-line-trimmed
-                                                last-line-trimmed))))))
+      (cond (= 1 (count intersecting-lines))
+            (let [[text [offset _]] (first intersecting-lines)
+                  relative-offset (- idx offset)]
+              (insert-lines lines offset (delete-from-str text relative-offset arg)))
+            (< 1 (count intersecting-lines)) 
+            (let [[text-first [offset-first _]] (first intersecting-lines)
+                  [text-last [offset-last _]] (last intersecting-lines)
+                  first-rel-offset (- idx offset-first)
+                  last-rel-offset (- (+ arg idx) offset-last)
+                  first-line-trimmed (delete-from-str text-first first-rel-offset 10000)
+                  last-line-trimmed (delete-from-str text-last 0 last-rel-offset)]
+              (insert-lines lines offset-first (str first-line-trimmed last-line-trimmed)))
+            :else lines)))
 
 (defn insert-to-lines-tree [lines idx arg]
   (let [affected-lines (t/query lines (dec idx) (inc idx) first)

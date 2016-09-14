@@ -5,9 +5,8 @@
             [barfer.tree :as t]
             [barfer.caret :as c]
             [clojure.string]
-            [keybind.core :as key]))
-
-
+            [keybind.core :as key])
+  (:require-macros [reagent.ratom :refer [reaction with-let]]))
  
 (def model-0 (first (-> [{:lines (->
                                 (t/make-tree)
@@ -51,25 +50,6 @@
   
   )
 
-(defn split-by-markup [markup [text [line-offset number]]]
-  (->> markup
-       (map (fn [[{:keys [attrs length]} [marker-offset _]]]
-              (let [rel-offset (- marker-offset line-offset)]
-                {:attrs attrs
-                 :text (clojure.string/trim-newline (subs text rel-offset (+ rel-offset length)))})))
-       (filter (complement (comp empty? :text)))))
-
-(defn line [markup l i]
-  (js/console.log "reconciling line" i)
-  [:div
-   (for [{{:keys [foreground background]} :attrs
-          text                            :text} (split-by-markup markup l)]
-     ^{:key (hash [text foreground background])}
-     [:span
-      {:style {:color (or foreground "green")
-               :background-color (or background "white")}}
-      text])])
-
 (do
   (key/bind! "down"
              ::down
@@ -91,13 +71,8 @@
              #(type! "\n"))
   )
 
-(defn barfer [model]
-  (let [lines (reaction (t/query (:lines @model) 0 40 second))
-        markup (:markup @model)
-        markers (t/query markup 0 10000 first)]
-    [:div
-     
-     [:div {:style {:overflow :hidden
+(defn hidden-textarea [model]
+  [:div {:style {:overflow :hidden
                     :position :relative
                     :width "3px"
                     :height "0px"}}
@@ -116,18 +91,55 @@
                   :on-change (fn [evt]
                                (let [elt (.-target evt)
                                      val (.-value elt)]
-                                 (type! (or val ""))
+                                 (swap! model c/type-in (or val ""))
                                  (aset elt "value" "")
                                  true))
                   :on-focus (fn [e]
                               (js/console.log "textarea focused")
-                              true)}]]
-     (map-indexed
-      (fn [i l]
-        ^{:key i}
-        [:div
-         [line markers l i]])
-      lines)]))
+                              true)}]])
+
+(defn split-by-markup [markup [text [line-offset number]]]
+  (->> markup
+       (map (fn [[{:keys [attrs length]} [marker-offset _]]]
+              (let [rel-offset (- marker-offset line-offset)]
+                {:attrs attrs
+                 :text (clojure.string/trim-newline (subs text rel-offset (+ rel-offset length)))})))
+       (filter (complement (comp empty? :text)))))
+
+(defn line [model lines i]
+  (js/console.log "reconciling line" i)
+  (with-let [line (reaction (first (@lines i)))
+             caret (reaction (:caret @model))
+             caret-here? (reaction (= i (:line @caret)))
+             markers (reaction
+                      (let [[text [offset _]] @line]
+                        (-> @model
+                            :markup
+                            (t/query offset (+ offset (count text)) first))))]
+    [:div
+     #_(str @line)
+     #_(str @markers) 
+     #_(when @caret-here?
+       (str @caret))
+     (for [{{:keys [foreground background]} :attrs
+            text                            :text} (split-by-markup @markers @line)]
+       ^{:key (hash [text foreground background])}
+       [:span
+        {:style {:color (or foreground "green")
+                 :background-color (or background "white")}}
+        text])]))
+
+(defn barfer [model]
+  (with-let [lines (reaction (as-> @model x
+                               (:lines x)
+                               (t/query x 0 40 second)
+                               (group-by (comp second second) x)))
+             line-numbers (reaction (keys @lines))]
+    [:div
+     [hidden-textarea model]
+     (for [i @line-numbers]
+       ^{:key i}
+       [line model lines i])]))
 
 (defn main []
   (let [e (js/document.getElementById "container")]

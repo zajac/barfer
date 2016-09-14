@@ -34,9 +34,14 @@
 (swap! boot.repl/*default-middleware*
        conj 'cider.nrepl/cider-middleware)
 
+(deftask fix-source-maps
+  []
+  (boot.core/with-pass-thru _
+    (alter-var-root #'adzerk.boot-cljs.middleware/source-map (fn [_] identity))))
 
 (deftask dev []
-  (comp (serve :dir "target")
+  (comp (fix-source-maps)
+        (serve :dir "target")
         (watch)
         (speak)
         (reload :on-jsload 'barfer.app/main)
@@ -44,3 +49,7 @@
         (cljs :source-map true
               :optimizations :none)
         (target :dir #{"target"})))
+
+(comment
+  (boot (dev))
+  )
